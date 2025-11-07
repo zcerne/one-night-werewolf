@@ -1,0 +1,10 @@
+{
+  "pythonVersion": "3.12",
+  "venvPath": "/home/ziga/Nextcloud/programi/igre/werewolf/",
+  "venv": ".venv",
+  "typeCheckingMode": "basic",
+  "reportOptionalMemberAccess": false,
+  "reportOptionalCall": false,
+  "reportGeneralTypeIssues": false,
+  "reportPropertyTypeMismatch":false
+}

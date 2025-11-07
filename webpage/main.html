@@ -1,0 +1,537 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>One Night Werewolf Game</title>
+    <link rel="stylesheet" href="style.css">
+    <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+</head>
+<body>
+    <h1>One Night Werewolf Game</h1>
+
+    <!-- Welcome Screen -->
+    <div class="setup-section" id="welcomeScreen">
+        <h2>Welcome!</h2>
+        <div class="controls">
+            <label for="playerNameInput">Player Name:</label>
+            <input type="text" id="playerNameInput" placeholder="Enter your name">
+        </div>
+        <div class="controls">
+            <button onclick="createGame()">Create Game</button>
+            <button onclick="showJoinGame()">Join Game</button>
+        </div>
+    </div>
+
+    <!-- Join Game Screen -->
+    <div class="setup-section" id="joinGameScreen" style="display: none;">
+        <h2>Join Game</h2>
+        <p>Player Name: <strong id="joinPlayerName"></strong></p>
+        <div class="controls">
+            <label for="gameCodeInput">Game Code:</label>
+            <input type="text" id="gameCodeInput" placeholder="Enter 5-letter game code" maxlength="5" style="text-transform: uppercase;">
+        </div>
+        <div class="controls">
+            <button onclick="joinGame()">Join</button>
+            <button onclick="backToWelcome()">Back</button>
+        </div>
+        <div id="joinMessage" class="warning" style="display: none;">
+            Waiting for further instructions...
+        </div>
+        <div id="joinedPlayersList" style="display: none; margin-top: 20px;">
+            <h3>Players in Game:</h3>
+            <ul id="joinedPlayersListItems"></ul>
+        </div>
+    </div>
+
+    <!-- Game Setup Screen (Host) -->
+    <div class="setup-section" id="gameSetupScreen" style="display: none;">
+        <h2>Game Setup</h2>
+        <p>Host: <strong id="hostName"></strong></p>
+        <div style="text-align: center; margin: 20px 0;">
+            <p style="margin-bottom: 10px;">Game Code:</p>
+            <p id="gameCode" style="font-size: 32px; color: #4CAF50; font-weight: bold; letter-spacing: 5px;"></p>
+        </div>
+        <div id="setupPlayersList" style="display: none; margin-bottom: 20px;">
+            <h3>Players in Game:</h3>
+            <ul id="setupPlayersListItems"></ul>
+        </div>
+        <div class="controls">
+            <label for="numPlayers">Number of Players (3-7):</label>
+            <input type="number" id="numPlayers" min="3" max="7" value="3">
+        </div>
+        <div class="controls">
+            <button onclick="setPlayerCount()">Continue</button>
+        </div>
+    </div>
+
+    <!-- Choose Characters Section -->
+    <div class="setup-section" id="chooseCharactersSection" style="display: none;">
+        <h2>Choose Characters</h2>
+        <div style="text-align: center; margin-bottom: 20px;">
+            <p>Game Code: <strong id="gameCodeDisplay" style="font-size: 20px; color: #4CAF50; letter-spacing: 3px;"></strong></p>
+        </div>
+        <div id="characterPlayersList" style="display: none; margin-bottom: 20px;">
+            <h3>Players in Game:</h3>
+            <ul id="characterPlayersListItems"></ul>
+        </div>
+        <div id="charactersWarning" class="warning" style="display: none;">
+            ⚠️ You need <span id="charactersNeeded">3</span> more characters to continue.
+        </div>
+        <div class="instructions">
+            <p id="characterInstructions">Please choose <span id="requiredCharacters">6</span> characters for the game (players + 3 center cards).</p>
+            <p>Available characters and their limits:</p>
+            <ul id="characterList">
+                <!-- Character list will be populated by JavaScript -->
+            </ul>
+        </div>
+        <div class="controls">
+            <select id="characterSelect">
+                <option value="">Select character...</option>
+            </select>
+            <button onclick="addCharacter()">Add Character</button>
+            <button onclick="clearCharacters()">Clear All</button>
+        </div>
+        <div id="selectedCharacters">
+            <h3>Selected Characters:</h3>
+            <div id="selectedCharactersList"></div>
+        </div>
+    </div>
+
+    <!-- Game Controls -->
+    <div class="setup-section" id="gameControls" style="display: none;">
+        <h2>Ready to Start</h2>
+        <div style="text-align: center; margin-bottom: 20px;">
+            <p>Game Code: <strong id="gameCodeDisplay2" style="font-size: 20px; color: #4CAF50; letter-spacing: 3px;"></strong></p>
+        </div>
+        <div class="controls">
+            <button onclick="initializeGame()">Initialize Game</button>
+            <button onclick="resetGame()">Reset Game</button>
+        </div>
+    </div>
+
+    <!-- Role Display -->
+    <div class="setup-section" id="roleDisplay" style="display: none;">
+        <h2>Your Role</h2>
+        <div style="text-align: center; margin: 30px 0;">
+            <p style="font-size: 18px; margin-bottom: 20px;">You are:</p>
+            <p id="playerRole" style="font-size: 32px; color: #4CAF50; font-weight: bold;"></p>
+        </div>
+        <div class="instructions">
+            <p>The game has started! Check your role above.</p>
+            <p>Wait for the host to manage the night phase.</p>
+        </div>
+    </div>
+
+    <div id="centerCards" style="display: none; margin-top: 20px;">
+        <h3>Center Cards:</h3>
+        <div id="centerCardsDisplay" style="display: flex; gap: 10px; justify-content: center;">
+            <!-- Center cards will be displayed here -->
+        </div>
+    </div>
+
+    <script src="main.js"></script>
+    <script>
+        // Initialize SocketIO connection
+        const socket = io();
+        
+        // Initialize game
+        const game = new Game();
+        let numPlayers = 3;
+        let currentGameCode = '';
+        let currentPlayerName = '';
+        let isHost = false;
+
+        // SocketIO Event Listeners
+        socket.on('connected', (data) => {
+            console.log('Connected to server:', data.message);
+        });
+
+        socket.on('error', (data) => {
+            alert('Error: ' + data.message);
+        });
+
+        socket.on('game_created', (data) => {
+            console.log('Game created:', data);
+            currentGameCode = data.game_code;
+            currentPlayerName = data.player_name;
+            isHost = data.is_host;
+            
+            // Update UI
+            document.getElementById('hostName').textContent = currentPlayerName;
+            document.getElementById('gameCode').textContent = currentGameCode;
+            
+            // Update players list
+            updatePlayersList(data.game_state.players);
+        });
+
+        socket.on('game_joined', (data) => {
+            console.log('Game joined:', data);
+            currentGameCode = data.game_code;
+            currentPlayerName = data.player_name;
+            isHost = data.is_host;
+            
+            // Update players list
+            updatePlayersList(data.game_state.players);
+        });
+
+        socket.on('player_joined', (data) => {
+            console.log('Player joined:', data);
+            // Update players list for all users
+            updatePlayersList(data.players);
+        });
+
+        socket.on('player_left', (data) => {
+            console.log('Player left:', data);
+            updatePlayersList(data.players);
+        });
+
+        socket.on('player_count_set', (data) => {
+            console.log('Player count set:', data);
+            numPlayers = data.num_players;
+        });
+
+        socket.on('character_added', (data) => {
+            console.log('Character added:', data);
+            game.characters_in_game = data.characters_in_game;
+            updateSelectedCharacters();
+            updateCharacterWarnings();
+            
+            // Check if we have enough characters
+            if (game.characters_in_game.length >= numPlayers + 3) {
+                document.getElementById('gameControls').style.display = 'block';
+                document.getElementById('chooseCharactersSection').style.display = 'none';
+                document.getElementById('gameCodeDisplay2').textContent = currentGameCode;
+            }
+        });
+
+        socket.on('characters_cleared', (data) => {
+            console.log('Characters cleared:', data);
+            game.characters_in_game = [];
+            updateSelectedCharacters();
+            updateCharacterWarnings();
+            document.getElementById('gameControls').style.display = 'none';
+        });
+
+        socket.on('role_assigned', (data) => {
+            console.log('Role assigned:', data);
+            // Show role to player
+            document.getElementById('playerRole').textContent = data.role;
+            
+            // Hide all other screens
+            document.getElementById('welcomeScreen').style.display = 'none';
+            document.getElementById('joinGameScreen').style.display = 'none';
+            document.getElementById('gameSetupScreen').style.display = 'none';
+            document.getElementById('chooseCharactersSection').style.display = 'none';
+            document.getElementById('gameControls').style.display = 'none';
+            
+            // Show role display
+            document.getElementById('roleDisplay').style.display = 'block';
+        });
+
+        socket.on('game_initialized', (data) => {
+            console.log('Game initialized:', data);
+            // Game has started - role will be sent separately via 'role_assigned'
+            
+            // If host, request center cards
+            if (isHost) {
+                socket.emit('get_center_cards', {
+                    game_code: currentGameCode
+                });
+            }
+        });
+
+        socket.on('center_cards', (data) => {
+            console.log('Center cards:', data);
+            displayCenterCards(data.cards);
+        });
+
+        // Helper function to update players list in all screens
+        function updatePlayersList(players) {
+            // Update all player list locations
+            const listIds = ['setupPlayersListItems', 'joinedPlayersListItems', 'characterPlayersListItems'];
+            const containerIds = ['setupPlayersList', 'joinedPlayersList', 'characterPlayersList'];
+            
+            listIds.forEach((listId, index) => {
+                const listElement = document.getElementById(listId);
+                const containerElement = document.getElementById(containerIds[index]);
+                
+                if (listElement && containerElement) {
+                    listElement.innerHTML = '';
+                    
+                    if (players && players.length > 0) {
+                        players.forEach(player => {
+                            const li = document.createElement('li');
+                            li.textContent = player.name;
+                            listElement.appendChild(li);
+                        });
+                        containerElement.style.display = 'block';
+                    } else {
+                        containerElement.style.display = 'none';
+                    }
+                }
+            });
+        }
+
+        // Generate random 5-letter code
+        function generateGameCode() {
+            const letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+            let code = '';
+            for (let i = 0; i < 5; i++) {
+                code += letters.charAt(Math.floor(Math.random() * letters.length));
+            }
+            return code;
+        }
+
+        // Create game
+        function createGame() {
+            const name = document.getElementById('playerNameInput').value.trim();
+            if (!name) {
+                alert('Please enter your name');
+                return;
+            }
+
+            // Emit create_game event to server
+            socket.emit('create_game', {
+                player_name: name
+            });
+
+            // Show game setup screen (will be populated when server responds)
+            document.getElementById('welcomeScreen').style.display = 'none';
+            document.getElementById('gameSetupScreen').style.display = 'block';
+        }
+
+        // Show join game screen
+        function showJoinGame() {
+            const name = document.getElementById('playerNameInput').value.trim();
+            if (!name) {
+                alert('Please enter your name');
+                return;
+            }
+
+            currentPlayerName = name;
+            isHost = false;
+
+            // Show join game screen
+            document.getElementById('welcomeScreen').style.display = 'none';
+            document.getElementById('joinGameScreen').style.display = 'block';
+            document.getElementById('joinPlayerName').textContent = currentPlayerName;
+        }
+
+        // Join game
+        function joinGame() {
+            const code = document.getElementById('gameCodeInput').value.trim().toUpperCase();
+            if (code.length !== 5) {
+                alert('Please enter a valid 5-letter game code');
+                return;
+            }
+
+            const playerName = document.getElementById('joinPlayerName').textContent;
+            
+            // Emit join_game event to server
+            socket.emit('join_game', {
+                game_code: code,
+                player_name: playerName
+            });
+            
+            // Show waiting message
+            document.getElementById('joinMessage').style.display = 'block';
+            document.getElementById('joinMessage').textContent = 'Joining game...';
+            
+            // Disable input and join button
+            document.getElementById('gameCodeInput').disabled = true;
+            const buttons = document.querySelectorAll('#joinGameScreen button');
+            buttons[0].disabled = true; // Disable only the Join button
+        }
+
+        // Back to welcome
+        function backToWelcome() {
+            document.getElementById('joinGameScreen').style.display = 'none';
+            document.getElementById('welcomeScreen').style.display = 'block';
+            document.getElementById('gameCodeInput').value = '';
+            document.getElementById('gameCodeInput').disabled = false;
+            document.getElementById('joinMessage').style.display = 'none';
+            const buttons = document.querySelectorAll('#joinGameScreen button');
+            buttons[0].disabled = false;
+        }
+
+        // Set player count and show character selection
+        function setPlayerCount() {
+            const input = document.getElementById('numPlayers');
+            numPlayers = parseInt(input.value);
+
+            if (numPlayers < 3 || numPlayers > 7) {
+                alert('Please enter a number between 3 and 7');
+                return;
+            }
+
+            // Emit set_player_count event to server
+            socket.emit('set_player_count', {
+                game_code: currentGameCode,
+                num_players: numPlayers
+            });
+
+            // Update instructions
+            document.getElementById('requiredCharacters').textContent = numPlayers + 3;
+
+            // Show character selection
+            document.getElementById('gameSetupScreen').style.display = 'none';
+            document.getElementById('chooseCharactersSection').style.display = 'block';
+            document.getElementById('gameCodeDisplay').textContent = currentGameCode;
+            
+            populateCharacterList();
+            populateCharacterDropdown();
+            updateCharacterWarnings();
+        }
+
+        // Populate character list with limits
+        function populateCharacterList() {
+            const list = document.getElementById('characterList');
+            list.innerHTML = '';
+            game.availableCharacters.forEach((character, index) => {
+                const li = document.createElement('li');
+                li.textContent = `${character} (max: ${game.characterLimits[index]})`;
+                list.appendChild(li);
+            });
+        }
+
+        // Populate character dropdown
+        function populateCharacterDropdown() {
+            const select = document.getElementById('characterSelect');
+            select.innerHTML = '<option value="">Select character...</option>';
+            game.availableCharacters.forEach(character => {
+                const option = document.createElement('option');
+                option.value = character;
+                option.textContent = character;
+                select.appendChild(option);
+            });
+        }
+
+        // Function to add a character
+        function addCharacter() {
+            const select = document.getElementById('characterSelect');
+            const character = select.value;
+
+            if (!character) {
+                alert('Please select a character');
+                return;
+            }
+
+            // Emit add_character event to server
+            socket.emit('add_character', {
+                game_code: currentGameCode,
+                character: character
+            });
+
+            // Clear selection
+            select.value = '';
+        }
+
+        // Function to clear all characters
+        function clearCharacters() {
+            // Emit clear_characters event to server
+            socket.emit('clear_characters', {
+                game_code: currentGameCode
+            });
+        }
+
+        // Update selected characters display
+        function updateSelectedCharacters() {
+            const list = document.getElementById('selectedCharactersList');
+            list.innerHTML = '';
+
+            if (game.characters_in_game.length === 0) {
+                list.innerHTML = '<p>No characters selected yet.</p>';
+                return;
+            }
+
+            game.characters_in_game.forEach(character => {
+                const tag = document.createElement('span');
+                tag.className = 'character-tag';
+                tag.textContent = character;
+                list.appendChild(tag);
+            });
+        }
+
+        // Update character warnings
+        function updateCharacterWarnings() {
+            const warningDiv = document.getElementById('charactersWarning');
+            const neededSpan = document.getElementById('charactersNeeded');
+            const charactersNeeded = (numPlayers + 3) - game.characters_in_game.length;
+
+            if (charactersNeeded > 0) {
+                neededSpan.textContent = charactersNeeded;
+                warningDiv.style.display = 'block';
+            } else {
+                warningDiv.style.display = 'none';
+            }
+        }
+
+        // Function to initialize the game
+        function initializeGame() {
+            // Emit initialize_game event to server
+            socket.emit('initialize_game', {
+                game_code: currentGameCode
+            });
+        }
+
+        // Function to reset the game
+        function resetGame() {
+            if (confirm('Are you sure you want to reset the game? This will take you back to the beginning.')) {
+                game.players = [];
+                game.characters_in_game = [];
+                game.gameInitialized = false;
+                currentGameCode = '';
+                currentPlayerName = '';
+                isHost = false;
+
+                // Reset UI state
+                document.getElementById('centerCards').style.display = 'none';
+                document.getElementById('gameControls').style.display = 'none';
+                document.getElementById('chooseCharactersSection').style.display = 'none';
+                document.getElementById('gameSetupScreen').style.display = 'none';
+                document.getElementById('joinGameScreen').style.display = 'none';
+                document.getElementById('welcomeScreen').style.display = 'block';
+                document.getElementById('playerNameInput').value = '';
+                document.getElementById('gameCodeInput').value = '';
+                document.getElementById('gameCodeInput').disabled = false;
+                document.getElementById('joinMessage').style.display = 'none';
+            }
+        }
+
+        // Function to display center cards
+        function displayCenterCards(centerCards) {
+            const centerCardsDiv = document.getElementById('centerCards');
+            const centerCardsDisplay = document.getElementById('centerCardsDisplay');
+
+            if (centerCards && centerCards.length > 0) {
+                centerCardsDisplay.innerHTML = '';
+
+                centerCards.forEach((card, index) => {
+                    const cardDiv = document.createElement('div');
+                    cardDiv.style.cssText = `
+                        border: 2px solid #333;
+                        padding: 15px;
+                        border-radius: 5px;
+                        background-color: #f0f0f0;
+                        text-align: center;
+                        min-width: 100px;
+                        font-weight: bold;
+                    `;
+                    cardDiv.textContent = card;
+                    centerCardsDisplay.appendChild(cardDiv);
+                });
+
+                centerCardsDiv.style.display = 'block';
+            } else {
+                centerCardsDiv.style.display = 'none';
+            }
+        }
+
+        // Make game code input uppercase as user types
+        document.getElementById('gameCodeInput').addEventListener('input', function(e) {
+            this.value = this.value.toUpperCase();
+        });
+    </script>
+</body>
+</html>
