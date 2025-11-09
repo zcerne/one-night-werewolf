@@ -104,9 +104,12 @@
         <div style="text-align: center; margin-bottom: 20px;">
             <p>Game Code: <strong id="gameCodeDisplay2" style="font-size: 20px; color: #4CAF50; letter-spacing: 3px;"></strong></p>
         </div>
-        <div class="controls">
+        <div class="controls" id="hostControls" style="display: none;">
             <button onclick="initializeGame()">Initialize Game</button>
             <button onclick="resetGame()">Reset Game</button>
+        </div>
+        <div id="waitingForHost" style="display: none; text-align: center; margin: 20px 0;">
+            <p style="font-size: 18px; color: #666;">Waiting for host to initialize the game...</p>
         </div>
     </div>
 
@@ -117,16 +120,141 @@
             <p style="font-size: 18px; margin-bottom: 20px;">You are:</p>
             <p id="playerRole" style="font-size: 32px; color: #4CAF50; font-weight: bold;"></p>
         </div>
-        <div class="instructions">
-            <p>The game has started! Check your role above.</p>
-            <p>Wait for the host to manage the night phase.</p>
+        <div class="instructions" id="roleInstructions" style="display: none;">
+            <h3>Navodila:</h3>
+            <div id="roleInstructionsContent"></div>
         </div>
     </div>
 
-    <div id="centerCards" style="display: none; margin-top: 20px;">
-        <h3>Center Cards:</h3>
-        <div id="centerCardsDisplay" style="display: flex; gap: 10px; justify-content: center;">
-            <!-- Center cards will be displayed here -->
+    <!-- Night Action Interface -->
+    <div class="setup-section" id="nightActionInterface" style="display: none;">
+        <h2 id="nightPhaseTitle">Night Phase</h2>
+        
+        <!-- Countdown Timer -->
+        <div id="timerDisplay" style="text-align: center; margin: 20px 0; padding: 20px; background-color: #f0f0f0; border-radius: 10px; display: none;">
+            <p style="font-size: 16px; margin-bottom: 10px; color: #666;">Čas do konca faze:</p>
+            <p id="timerCountdown" style="font-size: 48px; font-weight: bold; color: #2196f3; margin: 0;"></p>
+        </div>
+        
+        <!-- Player Role Info -->
+        <div id="playerRoleInfo" style="margin: 20px 0; padding: 15px; background-color: #e3f2fd; border-radius: 5px; border-left: 4px solid #2196f3; display: none;">
+            <h3 style="margin-top: 0;">Tvoja vloga: <span id="playerRoleDisplay"></span></h3>
+            <p id="playerRoleInstructions" style="margin-bottom: 0; font-style: italic;"></p>
+        </div>
+        
+        <div id="turnNotification" style="text-align: center; margin: 20px 0; padding: 15px; background-color: #fff3cd; border-radius: 5px; display: none;">
+            <p id="turnNotificationText" style="font-size: 18px; margin: 0;"></p>
+        </div>
+        
+        <!-- Dvojnik Action -->
+        <div id="action_dvojnik" class="action-interface" style="display: none;">
+            <h3>Izberi igralca za ogled vloge:</h3>
+            <select id="dvojnik_player_select" class="action-select"></select>
+            <button onclick="performDvojnikAction()" class="action-button">Poglej vlogo</button>
+            <div id="dvojnik_result" style="margin-top: 15px; display: none;"></div>
+            <div id="dvojnik_secondary_action" style="margin-top: 20px; display: none;"></div>
+        </div>
+
+        <!-- Volkodlak, Služabnik, Zidar - Just notification -->
+        <div id="action_notification_only" class="action-interface" style="display: none;">
+            <h3 id="notification_role_title"></h3>
+            <p id="notification_role_info"></p>
+            <button onclick="acknowledgeNotification()" class="action-button">V redu</button>
+        </div>
+
+        <!-- Videc Action -->
+        <div id="action_videc" class="action-interface" style="display: none;">
+            <h3>Izberi opcijo:</h3>
+            <div style="margin: 15px 0;">
+                <label><input type="radio" name="videc_choice" value="player" checked> Poglej vlogo igralca</label><br>
+                <label><input type="radio" name="videc_choice" value="center"> Poglej dve karti na sredini</label>
+            </div>
+            <div id="videc_player_choice">
+                <select id="videc_player_select" class="action-select"></select>
+            </div>
+            <div id="videc_center_choice" style="display: none;">
+                <label><input type="checkbox" id="videc_center_0"> Prva karta</label><br>
+                <label><input type="checkbox" id="videc_center_1"> Druga karta</label><br>
+                <label><input type="checkbox" id="videc_center_2"> Tretja karta</label>
+            </div>
+            <button onclick="performVidecAction()" class="action-button">Poglej</button>
+            <div id="videc_result" style="margin-top: 15px; display: none;"></div>
+        </div>
+
+        <!-- Tat Action -->
+        <div id="action_tat" class="action-interface" style="display: none;">
+            <h3>Izberi igralca za zamenjavo vloge:</h3>
+            <select id="tat_player_select" class="action-select"></select>
+            <button onclick="performTatAction()" class="action-button">Zamenjaj svojo vlogo</button>
+            <div id="tat_result" style="margin-top: 15px; display: none;"></div>
+        </div>
+
+        <!-- Težavnež Action -->
+        <div id="action_tezavnez" class="action-interface" style="display: none;">
+            <h3>Izberi dva igralca za zamenjavo kart:</h3>
+            <label>Prvi igralec:</label>
+            <select id="tezavnez_player1_select" class="action-select"></select>
+            <label>Drugi igralec:</label>
+            <select id="tezavnez_player2_select" class="action-select"></select>
+            <button onclick="performTezavnezAction()" class="action-button">Zamenjaj karti</button>
+            <div id="tezavnez_result" style="margin-top: 15px; display: none;"></div>
+        </div>
+
+        <!-- Pijanec Action -->
+        <div id="action_pijanec" class="action-interface" style="display: none;">
+            <h3>Izberi karto iz sredine za zamenjavo:</h3>
+            <select id="pijanec_center_select" class="action-select">
+                <option value="0">Prva karta</option>
+                <option value="1">Druga karta</option>
+                <option value="2">Tretja karta</option>
+            </select>
+            <button onclick="performPijanecAction()" class="action-button">Zamenjaj svojo karto</button>
+            <div id="pijanec_result" style="margin-top: 15px; display: none;"></div>
+        </div>
+
+        <!-- Nespečnež Action -->
+        <div id="action_nespecznez" class="action-interface" style="display: none;">
+            <h3>Poglej svojo trenutno vlogo:</h3>
+            <button onclick="performNespecznezAction()" class="action-button">Poglej vlogo</button>
+            <div id="nespecznez_result" style="margin-top: 15px; display: none;"></div>
+        </div>
+    </div>
+
+    <!-- Voting Phase -->
+    <div class="setup-section" id="votingPhase" style="display: none;">
+        <h2>Glasovanje</h2>
+        <div style="margin: 20px 0;">
+            <p style="font-size: 18px; margin-bottom: 20px;">Čas je, da glasujete kdo je volkodlak!</p>
+            <p style="margin-bottom: 15px;">Izberi igralca, za katerega misliš, da je volkodlak:</p>
+        </div>
+        <div class="controls">
+            <select id="votePlayerSelect" class="action-select" style="width: 100%; max-width: 300px; margin-bottom: 15px;">
+                <option value="">Izberi igralca...</option>
+            </select>
+            <button onclick="submitVote()" class="action-button">Glasuj!</button>
+        </div>
+        <div id="voteConfirmation" style="display: none; margin-top: 20px; padding: 15px; background-color: #d4edda; border-radius: 5px; border-left: 4px solid #28a745;">
+            <p style="margin: 0;">✓ Tvoj glas je bil oddan! Čakanje na ostale igralce...</p>
+        </div>
+    </div>
+
+    <!-- End Game Display -->
+    <div class="setup-section" id="endGameDisplay" style="display: none;">
+        <h2>Rezultati</h2>
+        <div id="votingResults" style="margin-bottom: 30px; padding: 20px; background-color: #fff3cd; border-radius: 5px;">
+            <h3>Rezultati glasovanja:</h3>
+            <div id="votingResultsContent"></div>
+        </div>
+        <button onclick="showEndGameResults()" class="action-button" id="showResultsBtn" style="margin-bottom: 20px;">Prikaži vse vloge</button>
+        <div id="endGameResults" style="display: none;">
+            <h3>Začetne vloge:</h3>
+            <div id="initialRoles"></div>
+            <h3 style="margin-top: 20px;">Trenutne vloge:</h3>
+            <div id="currentRoles"></div>
+            <h3 style="margin-top: 20px;">Začetne sredinske karte:</h3>
+            <div id="centerCardsStart"></div>
+            <h3 style="margin-top: 20px;">Končne sredinske karte:</h3>
+            <div id="centerCardsEnd"></div>
         </div>
     </div>
 
@@ -140,7 +268,12 @@
         let numPlayers = 3;
         let currentGameCode = '';
         let currentPlayerName = '';
+        let currentPlayerRole = '';
+        let currentRoleInstructions = '';
         let isHost = false;
+        let currentTimer = null;
+        let currentAudio = null;
+        let endAudioFile = null;
 
         // SocketIO Event Listeners
         socket.on('connected', (data) => {
@@ -202,6 +335,15 @@
                 document.getElementById('gameControls').style.display = 'block';
                 document.getElementById('chooseCharactersSection').style.display = 'none';
                 document.getElementById('gameCodeDisplay2').textContent = currentGameCode;
+                
+                // Show appropriate controls based on host status
+                if (isHost) {
+                    document.getElementById('hostControls').style.display = 'block';
+                    document.getElementById('waitingForHost').style.display = 'none';
+                } else {
+                    document.getElementById('hostControls').style.display = 'none';
+                    document.getElementById('waitingForHost').style.display = 'block';
+                }
             }
         });
 
@@ -215,8 +357,15 @@
 
         socket.on('role_assigned', (data) => {
             console.log('Role assigned:', data);
+            // Store role and instructions
+            currentPlayerRole = data.role;
+            currentRoleInstructions = data.instructions;
+            
             // Show role to player
             document.getElementById('playerRole').textContent = data.role;
+            
+            // Display role instructions if available
+            displayRoleInstructions(data.instructions);
             
             // Hide all other screens
             document.getElementById('welcomeScreen').style.display = 'none';
@@ -232,18 +381,210 @@
         socket.on('game_initialized', (data) => {
             console.log('Game initialized:', data);
             // Game has started - role will be sent separately via 'role_assigned'
+        });
+
+        // Night phase socket handlers
+        socket.on('night_phase_started', (data) => {
+            console.log('Night phase started:', data);
+            document.getElementById('roleDisplay').style.display = 'none';
+            document.getElementById('nightActionInterface').style.display = 'block';
             
-            // If host, request center cards
-            if (isHost) {
-                socket.emit('get_center_cards', {
-                    game_code: currentGameCode
+            // Show player role info
+            document.getElementById('playerRoleInfo').style.display = 'block';
+            document.getElementById('playerRoleDisplay').textContent = currentPlayerRole;
+            document.getElementById('playerRoleInstructions').textContent = currentRoleInstructions || 'Ta vloga nima posebne akcije.';
+        });
+
+        socket.on('your_turn', (data) => {
+            console.log('Your turn:', data);
+            const currentRole = data.role;
+            
+            // Start countdown timer if duration is provided
+            if (data.duration && data.audio_files) {
+                startCountdown(data.duration, data.audio_files);
+            }
+            
+            // Show player role info
+            document.getElementById('playerRoleInfo').style.display = 'block';
+            document.getElementById('playerRoleDisplay').textContent = currentPlayerRole;
+            document.getElementById('playerRoleInstructions').textContent = currentRoleInstructions || 'Ta vloga nima posebne akcije.';
+            
+            // Show turn notification
+            document.getElementById('turnNotification').style.display = 'block';
+            document.getElementById('turnNotificationText').textContent = 'Zdaj si na potezi!';
+            
+            // Hide all action interfaces
+            hideAllActionInterfaces();
+            
+            // Show appropriate action interface based on role
+            showActionInterface(currentRole, data.other_players, data.team_info);
+        });
+
+        socket.on('wait_turn', (data) => {
+            console.log('Wait for turn:', data);
+            
+            // Start countdown timer if duration is provided
+            if (data.duration && data.audio_files) {
+                startCountdown(data.duration, data.audio_files);
+            }
+            
+            document.getElementById('turnNotification').style.display = 'block';
+            document.getElementById('turnNotificationText').textContent = data.message;
+            hideAllActionInterfaces();
+        });
+
+        socket.on('dvojnik_result', (data) => {
+            console.log('Dvojnik result:', data);
+            const resultDiv = document.getElementById('dvojnik_result');
+            resultDiv.innerHTML = `<div class="result-box"><p class="result-text">Videl si vlogo: ${data.viewed_role}</p></div>`;
+            resultDiv.style.display = 'block';
+            
+            // Update player's role display
+            document.getElementById('playerRole').textContent = data.viewed_role;
+            
+            // If copied role has an action, show it
+            if (data.has_secondary_action) {
+                showDvojnikSecondaryAction(data.viewed_role, data.other_players);
+            } else {
+                // No secondary action, mark as acted
+                setTimeout(() => {
+                    socket.emit('night_action_complete', {
+                        game_code: currentGameCode,
+                        player_name: currentPlayerName
+                    });
+                }, 2000);
+            }
+        });
+
+        socket.on('videc_result', (data) => {
+            console.log('Videc result:', data);
+            const resultDiv = document.getElementById('videc_result');
+            if (data.roles && data.roles.length > 0) {
+                resultDiv.innerHTML = `<div class="result-box"><p class="result-text">Videl si: ${data.roles.join(', ')}</p></div>`;
+            }
+            resultDiv.style.display = 'block';
+            
+            setTimeout(() => {
+                socket.emit('night_action_complete', {
+                    game_code: currentGameCode,
+                    player_name: currentPlayerName
+                });
+            }, 3000);
+        });
+
+        socket.on('tat_result', (data) => {
+            console.log('Tat result:', data);
+            const resultDiv = document.getElementById('tat_result');
+            resultDiv.innerHTML = `<div class="result-box"><p class="result-text">Tvoja nova vloga je: ${data.new_role}</p></div>`;
+            resultDiv.style.display = 'block';
+            
+            // Update player's role display
+            document.getElementById('playerRole').textContent = data.new_role;
+            
+            setTimeout(() => {
+                socket.emit('night_action_complete', {
+                    game_code: currentGameCode,
+                    player_name: currentPlayerName
+                });
+            }, 3000);
+        });
+
+        socket.on('tezavnez_result', (data) => {
+            console.log('Težavnež result:', data);
+            const resultDiv = document.getElementById('tezavnez_result');
+            resultDiv.innerHTML = `<div class="result-box"><p class="result-text">Karti ${data.player1} in ${data.player2} sta zamenjani!</p></div>`;
+            resultDiv.style.display = 'block';
+            
+            setTimeout(() => {
+                socket.emit('night_action_complete', {
+                    game_code: currentGameCode,
+                    player_name: currentPlayerName
+                });
+            }, 2000);
+        });
+
+        socket.on('pijanec_result', (data) => {
+            console.log('Pijanec result:', data);
+            const resultDiv = document.getElementById('pijanec_result');
+            resultDiv.innerHTML = `<div class="result-box"><p class="result-text">Tvoja karta je zamenjana s karto iz sredine!</p></div>`;
+            resultDiv.style.display = 'block';
+            
+            setTimeout(() => {
+                socket.emit('night_action_complete', {
+                    game_code: currentGameCode,
+                    player_name: currentPlayerName
+                });
+            }, 2000);
+        });
+
+        socket.on('nespecznez_result', (data) => {
+            console.log('Nespečnež result:', data);
+            const resultDiv = document.getElementById('nespecznez_result');
+            resultDiv.innerHTML = `<div class="result-box"><p class="result-text">Tvoja trenutna vloga je: ${data.current_role}</p></div>`;
+            resultDiv.style.display = 'block';
+            
+            // Update player's role display
+            document.getElementById('playerRole').textContent = data.current_role;
+            
+            setTimeout(() => {
+                socket.emit('night_action_complete', {
+                    game_code: currentGameCode,
+                    player_name: currentPlayerName
+                });
+            }, 3000);
+        });
+
+        socket.on('action_recorded', (data) => {
+            console.log('Action recorded:', data);
+            // Show confirmation that action was recorded
+            // Timer will continue until phase ends automatically
+            document.getElementById('turnNotificationText').textContent = 'Akcija zapisana! Čakanje na konec faze...';
+        });
+
+        socket.on('day_phase_started', (data) => {
+            console.log('Day phase started:', data);
+            
+            // Stop countdown timer
+            stopCountdown();
+            
+            document.getElementById('nightActionInterface').style.display = 'none';
+            
+            // Show voting phase
+            document.getElementById('votingPhase').style.display = 'block';
+            
+            // Populate voting dropdown with all players
+            const voteSelect = document.getElementById('votePlayerSelect');
+            voteSelect.innerHTML = '<option value="">Izberi igralca...</option>';
+            if (data.all_players) {
+                data.all_players.forEach(player => {
+                    const option = document.createElement('option');
+                    option.value = player;
+                    option.textContent = player;
+                    voteSelect.appendChild(option);
                 });
             }
         });
 
-        socket.on('center_cards', (data) => {
-            console.log('Center cards:', data);
-            displayCenterCards(data.cards);
+        socket.on('vote_received', (data) => {
+            console.log('Vote received:', data);
+            // Show confirmation message
+            document.getElementById('voteConfirmation').style.display = 'block';
+        });
+
+        socket.on('voting_complete', (data) => {
+            console.log('Voting complete:', data);
+            // Hide voting phase
+            document.getElementById('votingPhase').style.display = 'none';
+            
+            // Show end game display with voting results
+            document.getElementById('endGameDisplay').style.display = 'block';
+            displayVotingResults(data.votes);
+        });
+
+        socket.on('game_ended', (data) => {
+            console.log('Game ended:', data);
+            // Store end game data for display
+            window.endGameData = data;
         });
 
         // Helper function to update players list in all screens
@@ -271,6 +612,95 @@
                     }
                 }
             });
+        }
+
+        // Timer countdown functions
+        function startCountdown(duration, audioFiles) {
+            console.log('Starting countdown:', duration, 'seconds');
+            console.log('Audio files:', audioFiles);
+            
+            // Clear any existing timer
+            if (currentTimer) {
+                clearInterval(currentTimer);
+                currentTimer = null;
+            }
+            
+            // Stop any currently playing audio
+            if (currentAudio) {
+                currentAudio.pause();
+                currentAudio = null;
+            }
+            
+            // Play start audio if available
+            if (audioFiles && audioFiles.start) {
+                console.log('Playing start audio:', audioFiles.start);
+                currentAudio = new Audio(audioFiles.start);
+                currentAudio.play().then(() => {
+                    console.log('Start audio playing successfully');
+                }).catch(err => {
+                    console.error('Error playing start audio:', err);
+                });
+            } else {
+                console.warn('No start audio file provided');
+            }
+            
+            // Store end audio file for later
+            endAudioFile = audioFiles && audioFiles.end ? audioFiles.end : null;
+            
+            // Show timer display only if duration is valid
+            if (!duration || duration <= 0) {
+                console.warn('Invalid duration:', duration);
+                return;
+            }
+            
+            document.getElementById('timerDisplay').style.display = 'block';
+            
+            let timeLeft = duration;
+            updateTimerDisplay(timeLeft);
+            
+            currentTimer = setInterval(() => {
+                timeLeft--;
+                updateTimerDisplay(timeLeft);
+                
+                if (timeLeft <= 0) {
+                    clearInterval(currentTimer);
+                    currentTimer = null;
+                    
+                    // Play end audio
+                    if (endAudioFile) {
+                        console.log('Playing end audio:', endAudioFile);
+                        currentAudio = new Audio(endAudioFile);
+                        currentAudio.play().then(() => {
+                            console.log('End audio playing successfully');
+                        }).catch(err => {
+                            console.error('Error playing end audio:', err);
+                        });
+                    } else {
+                        console.warn('No end audio file');
+                    }
+                }
+            }, 1000);
+        }
+        
+        function updateTimerDisplay(seconds) {
+            const timerElement = document.getElementById('timerCountdown');
+            const minutes = Math.floor(seconds / 60);
+            const secs = seconds % 60;
+            timerElement.textContent = `${minutes}:${secs.toString().padStart(2, '0')}`;
+        }
+        
+        function stopCountdown() {
+            if (currentTimer) {
+                clearInterval(currentTimer);
+                currentTimer = null;
+            }
+            
+            if (currentAudio) {
+                currentAudio.pause();
+                currentAudio = null;
+            }
+            
+            document.getElementById('timerDisplay').style.display = 'none';
         }
 
         // Generate random 5-letter code
@@ -486,7 +916,6 @@
                 isHost = false;
 
                 // Reset UI state
-                document.getElementById('centerCards').style.display = 'none';
                 document.getElementById('gameControls').style.display = 'none';
                 document.getElementById('chooseCharactersSection').style.display = 'none';
                 document.getElementById('gameSetupScreen').style.display = 'none';
@@ -499,33 +928,451 @@
             }
         }
 
-        // Function to display center cards
-        function displayCenterCards(centerCards) {
-            const centerCardsDiv = document.getElementById('centerCards');
-            const centerCardsDisplay = document.getElementById('centerCardsDisplay');
-
-            if (centerCards && centerCards.length > 0) {
-                centerCardsDisplay.innerHTML = '';
-
-                centerCards.forEach((card, index) => {
-                    const cardDiv = document.createElement('div');
-                    cardDiv.style.cssText = `
-                        border: 2px solid #333;
-                        padding: 15px;
-                        border-radius: 5px;
-                        background-color: #f0f0f0;
-                        text-align: center;
-                        min-width: 100px;
-                        font-weight: bold;
-                    `;
-                    cardDiv.textContent = card;
-                    centerCardsDisplay.appendChild(cardDiv);
-                });
-
-                centerCardsDiv.style.display = 'block';
-            } else {
-                centerCardsDiv.style.display = 'none';
+        // Function to display role instructions
+        function displayRoleInstructions(instructions) {
+            const instructionsDiv = document.getElementById('roleInstructions');
+            const instructionsContent = document.getElementById('roleInstructionsContent');
+            
+            if (!instructions) {
+                // Show no action message for roles without night actions
+                instructionsContent.innerHTML = '';
+                const noActionP = document.createElement('p');
+                noActionP.innerHTML = '<em>Ta vloga nima nočne akcije. Počakaj na dan.</em>';
+                noActionP.style.fontStyle = 'italic';
+                noActionP.style.color = '#666';
+                instructionsContent.appendChild(noActionP);
+                instructionsDiv.style.display = 'block';
+                return;
             }
+            
+            // Instructions are now simple strings
+            instructionsContent.innerHTML = '';
+            const instructionP = document.createElement('p');
+            instructionP.textContent = instructions;
+            instructionP.style.fontSize = '16px';
+            instructionP.style.lineHeight = '1.6';
+            instructionsContent.appendChild(instructionP);
+            
+            instructionsDiv.style.display = 'block';
+        }
+
+        // Action interface helper functions
+        function hideAllActionInterfaces() {
+            const actionInterfaces = document.querySelectorAll('.action-interface');
+            actionInterfaces.forEach(el => el.style.display = 'none');
+        }
+
+        function showActionInterface(role, otherPlayers, teamInfo) {
+            const noActionRoles = ['volkodlak', 'služabnik', 'zidar', 'lovec', 'nesrečnik', 'meščan'];
+            
+            if (noActionRoles.includes(role)) {
+                // Show simple notification
+                document.getElementById('action_notification_only').style.display = 'block';
+                document.getElementById('notification_role_title').textContent = `Vloga: ${role}`;
+                
+                // Build info message with team info if available
+                let infoMessage = '';
+                if (role === 'volkodlak' && teamInfo && teamInfo.length > 0) {
+                    infoMessage = `Drugi volkodlaki: ${teamInfo.join(', ')}`;
+                } else if (role === 'služabnik' && teamInfo && teamInfo.length > 0) {
+                    infoMessage = `Volkodlaki so: ${teamInfo.join(', ')}`;
+                } else if (role === 'zidar' && teamInfo && teamInfo.length > 0) {
+                    infoMessage = `Drugi zidarji: ${teamInfo.join(', ')}`;
+                } else if (role === 'volkodlak' && (!teamInfo || teamInfo.length === 0)) {
+                    infoMessage = 'Si edini volkodlak.';
+                } else if (role === 'služabnik' && (!teamInfo || teamInfo.length === 0)) {
+                    infoMessage = 'Ni volkodlakov v igri.';
+                } else if (role === 'zidar' && (!teamInfo || teamInfo.length === 0)) {
+                    infoMessage = 'Si edini zidar.';
+                } else {
+                    infoMessage = 'Ta vloga nima posebne akcije.';
+                }
+                
+                document.getElementById('notification_role_info').textContent = infoMessage;
+            } else if (role === 'dvojnik') {
+                document.getElementById('action_dvojnik').style.display = 'block';
+                populatePlayerSelect('dvojnik_player_select', otherPlayers);
+            } else if (role === 'videc') {
+                document.getElementById('action_videc').style.display = 'block';
+                populatePlayerSelect('videc_player_select', otherPlayers);
+                setupVidecChoiceToggle();
+            } else if (role === 'tat') {
+                document.getElementById('action_tat').style.display = 'block';
+                populatePlayerSelect('tat_player_select', otherPlayers);
+            } else if (role === 'težavnež') {
+                document.getElementById('action_tezavnez').style.display = 'block';
+                populatePlayerSelect('tezavnez_player1_select', otherPlayers);
+                populatePlayerSelect('tezavnez_player2_select', otherPlayers);
+            } else if (role === 'pijanec') {
+                document.getElementById('action_pijanec').style.display = 'block';
+            } else if (role === 'nespečnež' || role === 'dvojnik_nespečnež') {
+                document.getElementById('action_nespecznez').style.display = 'block';
+            }
+        }
+
+        function populatePlayerSelect(selectId, players) {
+            const select = document.getElementById(selectId);
+            select.innerHTML = '';
+            players.forEach(player => {
+                const option = document.createElement('option');
+                option.value = player;
+                option.textContent = player;
+                select.appendChild(option);
+            });
+        }
+
+        function setupVidecChoiceToggle() {
+            const radios = document.querySelectorAll('input[name="videc_choice"]');
+            radios.forEach(radio => {
+                radio.addEventListener('change', function() {
+                    if (this.value === 'player') {
+                        document.getElementById('videc_player_choice').style.display = 'block';
+                        document.getElementById('videc_center_choice').style.display = 'none';
+                    } else {
+                        document.getElementById('videc_player_choice').style.display = 'none';
+                        document.getElementById('videc_center_choice').style.display = 'block';
+                    }
+                });
+            });
+        }
+
+        // Role action functions
+        function performDvojnikAction() {
+            const targetPlayer = document.getElementById('dvojnik_player_select').value;
+            socket.emit('action_dvojnik', {
+                game_code: currentGameCode,
+                player_name: currentPlayerName,
+                target_player: targetPlayer
+            });
+        }
+
+        function showDvojnikSecondaryAction(copiedRole, otherPlayers) {
+            const secondaryDiv = document.getElementById('dvojnik_secondary_action');
+            secondaryDiv.innerHTML = '<h3>Zdaj opravi akcijo svoje nove vloge:</h3>';
+            
+            // Create action interface for the copied role
+            if (copiedRole === 'videc') {
+                secondaryDiv.innerHTML += `
+                    <div style="margin: 15px 0;">
+                        <label><input type="radio" name="dvojnik_videc_choice" value="player" checked> Poglej vlogo igralca</label><br>
+                        <label><input type="radio" name="dvojnik_videc_choice" value="center"> Poglej dve karti na sredini</label>
+                    </div>
+                    <div id="dvojnik_videc_player_choice">
+                        <select id="dvojnik_videc_player_select" class="action-select"></select>
+                    </div>
+                    <div id="dvojnik_videc_center_choice" style="display: none;">
+                        <label><input type="checkbox" id="dvojnik_videc_center_0"> Prva karta</label><br>
+                        <label><input type="checkbox" id="dvojnik_videc_center_1"> Druga karta</label><br>
+                        <label><input type="checkbox" id="dvojnik_videc_center_2"> Tretja karta</label>
+                    </div>
+                    <button onclick="performDvojnikVidecAction()" class="action-button">Poglej</button>
+                `;
+                populatePlayerSelect('dvojnik_videc_player_select', otherPlayers);
+                setupDvojnikVidecToggle();
+            } else if (copiedRole === 'tat') {
+                secondaryDiv.innerHTML += `
+                    <select id="dvojnik_tat_player_select" class="action-select"></select>
+                    <button onclick="performDvojnikTatAction()" class="action-button">Zamenjaj svojo vlogo</button>
+                `;
+                populatePlayerSelect('dvojnik_tat_player_select', otherPlayers);
+            } else if (copiedRole === 'težavnež') {
+                secondaryDiv.innerHTML += `
+                    <label>Prvi igralec:</label>
+                    <select id="dvojnik_tezavnez_player1_select" class="action-select"></select>
+                    <label>Drugi igralec:</label>
+                    <select id="dvojnik_tezavnez_player2_select" class="action-select"></select>
+                    <button onclick="performDvojnikTezavnezAction()" class="action-button">Zamenjaj karti</button>
+                `;
+                populatePlayerSelect('dvojnik_tezavnez_player1_select', otherPlayers);
+                populatePlayerSelect('dvojnik_tezavnez_player2_select', otherPlayers);
+            } else if (copiedRole === 'pijanec') {
+                secondaryDiv.innerHTML += `
+                    <select id="dvojnik_pijanec_center_select" class="action-select">
+                        <option value="0">Prva karta</option>
+                        <option value="1">Druga karta</option>
+                        <option value="2">Tretja karta</option>
+                    </select>
+                    <button onclick="performDvojnikPijanecAction()" class="action-button">Zamenjaj svojo karto</button>
+                `;
+            }
+            
+            secondaryDiv.style.display = 'block';
+        }
+
+        function setupDvojnikVidecToggle() {
+            const radios = document.querySelectorAll('input[name="dvojnik_videc_choice"]');
+            radios.forEach(radio => {
+                radio.addEventListener('change', function() {
+                    if (this.value === 'player') {
+                        document.getElementById('dvojnik_videc_player_choice').style.display = 'block';
+                        document.getElementById('dvojnik_videc_center_choice').style.display = 'none';
+                    } else {
+                        document.getElementById('dvojnik_videc_player_choice').style.display = 'none';
+                        document.getElementById('dvojnik_videc_center_choice').style.display = 'block';
+                    }
+                });
+            });
+        }
+
+        function performDvojnikVidecAction() {
+            const choice = document.querySelector('input[name="dvojnik_videc_choice"]:checked').value;
+            if (choice === 'player') {
+                const targetPlayer = document.getElementById('dvojnik_videc_player_select').value;
+                socket.emit('action_dvojnik_secondary', {
+                    game_code: currentGameCode,
+                    player_name: currentPlayerName,
+                    action_type: 'videc_player',
+                    target_player: targetPlayer
+                });
+            } else {
+                const indices = [];
+                for (let i = 0; i < 3; i++) {
+                    if (document.getElementById(`dvojnik_videc_center_${i}`).checked) {
+                        indices.push(i);
+                    }
+                }
+                if (indices.length !== 2) {
+                    alert('Izberi točno dve karti!');
+                    return;
+                }
+                socket.emit('action_dvojnik_secondary', {
+                    game_code: currentGameCode,
+                    player_name: currentPlayerName,
+                    action_type: 'videc_center',
+                    center_indices: indices
+                });
+            }
+        }
+
+        function performDvojnikTatAction() {
+            const targetPlayer = document.getElementById('dvojnik_tat_player_select').value;
+            socket.emit('action_dvojnik_secondary', {
+                game_code: currentGameCode,
+                player_name: currentPlayerName,
+                action_type: 'tat',
+                target_player: targetPlayer
+            });
+        }
+
+        function performDvojnikTezavnezAction() {
+            const player1 = document.getElementById('dvojnik_tezavnez_player1_select').value;
+            const player2 = document.getElementById('dvojnik_tezavnez_player2_select').value;
+            if (player1 === player2) {
+                alert('Izberi dva različna igralca!');
+                return;
+            }
+            socket.emit('action_dvojnik_secondary', {
+                game_code: currentGameCode,
+                player_name: currentPlayerName,
+                action_type: 'težavnež',
+                player1: player1,
+                player2: player2
+            });
+        }
+
+        function performDvojnikPijanecAction() {
+            const centerIndex = parseInt(document.getElementById('dvojnik_pijanec_center_select').value);
+            socket.emit('action_dvojnik_secondary', {
+                game_code: currentGameCode,
+                player_name: currentPlayerName,
+                action_type: 'pijanec',
+                center_index: centerIndex
+            });
+        }
+
+        function acknowledgeNotification() {
+            socket.emit('night_action_complete', {
+                game_code: currentGameCode,
+                player_name: currentPlayerName
+            });
+        }
+
+        function performVidecAction() {
+            const choice = document.querySelector('input[name="videc_choice"]:checked').value;
+            if (choice === 'player') {
+                const targetPlayer = document.getElementById('videc_player_select').value;
+                socket.emit('action_videc', {
+                    game_code: currentGameCode,
+                    player_name: currentPlayerName,
+                    action_type: 'player',
+                    target_player: targetPlayer
+                });
+            } else {
+                const indices = [];
+                for (let i = 0; i < 3; i++) {
+                    if (document.getElementById(`videc_center_${i}`).checked) {
+                        indices.push(i);
+                    }
+                }
+                if (indices.length !== 2) {
+                    alert('Izberi točno dve karti!');
+                    return;
+                }
+                socket.emit('action_videc', {
+                    game_code: currentGameCode,
+                    player_name: currentPlayerName,
+                    action_type: 'center',
+                    center_indices: indices
+                });
+            }
+        }
+
+        function performTatAction() {
+            const targetPlayer = document.getElementById('tat_player_select').value;
+            socket.emit('action_tat', {
+                game_code: currentGameCode,
+                player_name: currentPlayerName,
+                target_player: targetPlayer
+            });
+        }
+
+        function performTezavnezAction() {
+            const player1 = document.getElementById('tezavnez_player1_select').value;
+            const player2 = document.getElementById('tezavnez_player2_select').value;
+            if (player1 === player2) {
+                alert('Izberi dva različna igralca!');
+                return;
+            }
+            socket.emit('action_tezavnez', {
+                game_code: currentGameCode,
+                player_name: currentPlayerName,
+                player1: player1,
+                player2: player2
+            });
+        }
+
+        function performPijanecAction() {
+            const centerIndex = parseInt(document.getElementById('pijanec_center_select').value);
+            socket.emit('action_pijanec', {
+                game_code: currentGameCode,
+                player_name: currentPlayerName,
+                center_index: centerIndex
+            });
+        }
+
+        function performNespecznezAction() {
+            socket.emit('action_nespecznez', {
+                game_code: currentGameCode,
+                player_name: currentPlayerName
+            });
+        }
+
+        function submitVote() {
+            const votedPlayer = document.getElementById('votePlayerSelect').value;
+            if (!votedPlayer) {
+                alert('Prosim izberi igralca!');
+                return;
+            }
+            
+            socket.emit('submit_vote', {
+                game_code: currentGameCode,
+                player_name: currentPlayerName,
+                voted_for: votedPlayer
+            });
+        }
+
+        function displayVotingResults(votes) {
+            const resultsDiv = document.getElementById('votingResultsContent');
+            resultsDiv.innerHTML = '';
+            
+            // Count votes for each player
+            const voteCounts = {};
+            for (const [voter, votedFor] of Object.entries(votes)) {
+                if (!voteCounts[votedFor]) {
+                    voteCounts[votedFor] = [];
+                }
+                voteCounts[votedFor].push(voter);
+            }
+            
+            // Sort by number of votes
+            const sortedVotes = Object.entries(voteCounts).sort((a, b) => b[1].length - a[1].length);
+            
+            // Display results
+            sortedVotes.forEach(([player, voters]) => {
+                const p = document.createElement('p');
+                p.style.margin = '10px 0';
+                p.innerHTML = `<strong>${player}</strong>: ${voters.length} ${voters.length === 1 ? 'glas' : 'glasovi'} (${voters.join(', ')})`;
+                resultsDiv.appendChild(p);
+            });
+            
+            // Highlight player(s) with most votes
+            if (sortedVotes.length > 0) {
+                const maxVotes = sortedVotes[0][1].length;
+                const playersWithMaxVotes = sortedVotes.filter(([_, voters]) => voters.length === maxVotes);
+                
+                if (playersWithMaxVotes.length === 1) {
+                    const eliminatedP = document.createElement('p');
+                    eliminatedP.style.marginTop = '20px';
+                    eliminatedP.style.padding = '15px';
+                    eliminatedP.style.backgroundColor = '#f8d7da';
+                    eliminatedP.style.borderRadius = '5px';
+                    eliminatedP.style.fontWeight = 'bold';
+                    eliminatedP.innerHTML = `☠️ ${playersWithMaxVotes[0][0]} je bil izločen!`;
+                    resultsDiv.appendChild(eliminatedP);
+                } else {
+                    const tieP = document.createElement('p');
+                    tieP.style.marginTop = '20px';
+                    tieP.style.padding = '15px';
+                    tieP.style.backgroundColor = '#fff3cd';
+                    tieP.style.borderRadius = '5px';
+                    tieP.style.fontWeight = 'bold';
+                    tieP.innerHTML = `⚠️ Neodločeno! Nihče ni izločen.`;
+                    resultsDiv.appendChild(tieP);
+                }
+            }
+        }
+
+        function showEndGameResults() {
+            if (!window.endGameData) {
+                // Request end game data from server
+                socket.emit('request_end_game', {
+                    game_code: currentGameCode
+                });
+                return;
+            }
+            
+            const data = window.endGameData;
+            
+            // Display initial roles
+            const initialRolesDiv = document.getElementById('initialRoles');
+            initialRolesDiv.innerHTML = '';
+            for (const [playerName, roles] of Object.entries(data.players)) {
+                const p = document.createElement('p');
+                p.innerHTML = `<strong>${playerName}:</strong> ${roles.initial_role}`;
+                initialRolesDiv.appendChild(p);
+            }
+            
+            // Display current roles
+            const currentRolesDiv = document.getElementById('currentRoles');
+            currentRolesDiv.innerHTML = '';
+            for (const [playerName, roles] of Object.entries(data.players)) {
+                const p = document.createElement('p');
+                p.innerHTML = `<strong>${playerName}:</strong> ${roles.current_role}`;
+                currentRolesDiv.appendChild(p);
+            }
+            
+            // Display starting center cards
+            const centerCardsStartDiv = document.getElementById('centerCardsStart');
+            centerCardsStartDiv.innerHTML = '';
+            if (data.initial_center_cards) {
+                data.initial_center_cards.forEach((card, index) => {
+                    const p = document.createElement('p');
+                    p.innerHTML = `<strong>Karta ${index + 1}:</strong> ${card}`;
+                    centerCardsStartDiv.appendChild(p);
+                });
+            }
+            
+            // Display ending center cards
+            const centerCardsDiv = document.getElementById('centerCardsEnd');
+            centerCardsDiv.innerHTML = '';
+            data.center_cards.forEach((card, index) => {
+                const p = document.createElement('p');
+                p.innerHTML = `<strong>Karta ${index + 1}:</strong> ${card}`;
+                centerCardsDiv.appendChild(p);
+            });
+            
+            document.getElementById('endGameResults').style.display = 'block';
+            document.getElementById('showResultsBtn').style.display = 'none';
         }
 
         // Make game code input uppercase as user types

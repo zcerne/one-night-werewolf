@@ -8,6 +8,99 @@ from typing import Dict, List, Optional, Tuple
 from dataclasses import dataclass, field
 
 
+# Night phase instructions for each role
+ROLE_INSTRUCTIONS = {
+    "dvojnik": "Ko si na potezi poglej karto drugega igralca. To je tvoja nova vloga. Če ima tvoja vloga nočno akcijo jo opravi zdaj. Če je tvoja vloga Služabnik ostani buden in poišči volkodlake.",
+    "volkodlak": "Ko si na potezi se spoglej se z drugimi volkodlaki.",
+    "služabnik": "Ko si na potezi poišči volkodlake, ki se razkrijejo",
+    "zidar": "Ko si na potezi pogledaj druge zidarje.",
+    "videc": "Ko si na potezi lahko pogledaš eno karto drugega igralca ali dve karti na sredini.",
+    "tat": "Ko si na potezi lahko svojo karto zamenjaš z drugo karto in pogledaš svojo novo karto.",
+    "težavnež": "Ko si na potezi lahko zamenjaš karti dveh drugih igralcev.",
+    "pijanec": "Ko si na potezi zamenjaj svojo karto s karto iz sredine.",
+    "nespečnež":"Ko si na potezi poglej svojo karto.",
+    "dvojnik_nespečnež":"Na potezi si zadnji. Ko si na potezi poglej svojo karto.",
+    "lovec":None,
+    "nesrečnik": None,  # Tanner has no night action
+    "meščan": None  # Villager has no night action
+}
+
+# Night phase order (roles wake up in this order)
+NIGHT_PHASE_ORDER = [
+    "dvojnik",
+    "volkodlak",
+    "služabnik",
+    "zidar",
+    "videc",
+    "tat",
+    "težavnež",
+    "pijanec",
+    "nespečnež",
+    "dvojnik_nespečnež"  # Special case: doppelganger who copied insomniac
+]
+
+# Role durations in seconds (fixed time for each role's turn)
+ROLE_DURATIONS = {
+    "dvojnik": 15,
+    "volkodlak": 15,
+    "služabnik": 15,
+    "zidar": 15,
+    "videc": 15,
+    "tat": 15,
+    "težavnež": 15,
+    "pijanec": 15,
+    "nespečnež": 15,
+    "dvojnik_nespečnež": 15,
+    "lovec": 0,
+    "nesrečnik": 0,
+    "meščan": 0
+}
+
+# Audio files for each role
+ROLE_AUDIO_FILES = {
+    "dvojnik": {
+        "start": "audio_files/dvojnik.wav",
+        "end": "audio_files/dvojnik_konec.wav"
+    },
+    "volkodlak": {
+        "start": "audio_files/volkodlak.wav",
+        "end": "audio_files/volkodlak_konec.wav"
+    },
+    "služabnik": {
+        "start": "audio_files/sluzabnik.wav",
+        "end": "audio_files/sluzabnik_konec.wav"
+    },
+    "zidar": {
+        "start": "audio_files/zidar.wav",
+        "end": "audio_files/zidar_konec.wav"
+    },
+    "videc": {
+        "start": "audio_files/videc.wav",
+        "end": "audio_files/videc_konec.wav"
+    },
+    "tat": {
+        "start": "audio_files/tat.wav",
+        "end": "audio_files/tat_konec.wav"
+    },
+    "težavnež": {
+        "start": "audio_files/tezavnez.wav",
+        "end": "audio_files/tezavnez_konec.wav"
+    },
+    "pijanec": {
+        "start": "audio_files/pijanec.wav",
+        "end": "audio_files/pijanec_konec.wav"
+    },
+    "nespečnež": {
+        "start": "audio_files/nespecnez.wav",
+        "end": "audio_files/nespecnez_konec.wav"
+    },
+    "dvojnik_nespečnež": {
+        "start": "audio_files/dvojnik_nespecnez.wav",
+        "end": "audio_files/dvojnik_nespecnez_konec.wav"
+    }
+}
+
+
 @dataclass
 class PlayerState:
     """Represents a single player's state in the game."""
@@ -16,6 +109,8 @@ class PlayerState:
     current_role: Optional[str] = None
     ready: bool = False
     socket_id: Optional[str] = None
+    has_acted: bool = False  # Track if player has completed their night action
+    doppelganger_role: Optional[str] = None  # If doppelganger, what role they copied
     
     def to_dict(self) -> Dict:
         """Convert player state to dictionary (without revealing roles)."""
@@ -53,8 +148,12 @@ class GameState:
         self.num_players: Optional[int] = None
         self.characters_in_game: List[str] = []
         self.center_cards: List[str] = []
-        self.game_phase: str = "setup"  # setup, character_selection, ready, initialized
+        self.initial_center_cards: List[str] = []  # Store starting center cards
+        self.game_phase: str = "setup"  # setup, character_selection, ready, initialized, night_phase, day_phase, voting_phase, ended
         self.initialized: bool = False
+        self.current_role_index: int = 0  # Track which role's turn it is during night phase
+        self.night_phase_roles: List[str] = []  # Actual roles in play during night phase
+        self.votes: Dict[str, str] = {}  # Map of player_name -> voted_for_player_name
         
     def add_player(self, player_name: str, socket_id: Optional[str] = None) -> Tuple[bool, str]:
         """
@@ -166,17 +265,46 @@ class GameState:
         
         # Assign remaining 3 cards to center
         self.center_cards = shuffled_characters[self.num_players:]
+        self.initial_center_cards = self.center_cards.copy()  # Store initial state
         
         self.initialized = True
-        self.game_phase = "initialized"
+        self.game_phase = "night_phase"
+        
+        # Build list of roles that will act during night phase (in order)
+        self._build_night_phase_order()
         
         return True, "Game initialized successfully"
+    
+    def _build_night_phase_order(self):
+        """Build the ordered list of roles that will act during night phase."""
+        self.night_phase_roles = []
+        # Get all roles from players (not center cards)
+        player_roles = [p.initial_role for p in self.players.values()]
+        
+        # Add roles in the correct order if they exist in the game
+        for role in NIGHT_PHASE_ORDER:
+            if role in player_roles:
+                self.night_phase_roles.append(role)
+        
+        self.current_role_index = 0
     
     def get_player_role(self, player_name: str) -> Optional[str]:
         """Get a specific player's initial role."""
         if player_name not in self.players:
             return None
         return self.players[player_name].initial_role
+    
+    def get_role_instructions(self, role: str) -> Optional[str]:
+        """Get night phase instructions for a specific role."""
+        return ROLE_INSTRUCTIONS.get(role)
+    
+    def get_role_duration(self, role: str) -> int:
+        """Get the duration in seconds for a specific role."""
+        return ROLE_DURATIONS.get(role, 30)
+    
+    def get_role_audio_files(self, role: str) -> Optional[Dict[str, str]]:
+        """Get the audio file paths for a specific role."""
+        return ROLE_AUDIO_FILES.get(role)
     
     def get_center_cards(self) -> List[str]:
         """Get the center cards."""
@@ -187,6 +315,169 @@ class GameState:
         if include_roles:
             return [player.to_dict_with_role() for player in self.players.values()]
         return [player.to_dict() for player in self.players.values()]
+    
+    def get_current_night_role(self) -> Optional[str]:
+        """Get the current role whose turn it is during night phase."""
+        if self.game_phase != "night_phase":
+            return None
+        if self.current_role_index >= len(self.night_phase_roles):
+            return None
+        return self.night_phase_roles[self.current_role_index]
+    
+    def get_players_with_role(self, role: str) -> List[str]:
+        """Get list of player names who have a specific initial role."""
+        return [name for name, player in self.players.items() if player.initial_role == role]
+    
+    def get_other_players(self, player_name: str) -> List[str]:
+        """Get list of all other player names (excluding the given player)."""
+        return [name for name in self.players.keys() if name != player_name]
+    
+    def advance_night_phase(self) -> Tuple[bool, Optional[str]]:
+        """
+        Advance to the next role in night phase.
+        Returns: (is_night_complete: bool, next_role: Optional[str])
+        """
+        if self.game_phase != "night_phase":
+            return False, None
+        
+        self.current_role_index += 1
+        
+        if self.current_role_index >= len(self.night_phase_roles):
+            # Night phase is complete, move to voting phase
+            self.game_phase = "voting_phase"
+            return True, None
+        
+        return False, self.night_phase_roles[self.current_role_index]
+    
+    def mark_player_acted(self, player_name: str):
+        """Mark that a player has completed their night action."""
+        if player_name in self.players:
+            self.players[player_name].has_acted = True
+    
+    # Role action methods
+    
+    def action_dvojnik_view_role(self, player_name: str, target_name: str) -> Optional[str]:
+        """Doppelganger views another player's role and copies it."""
+        if target_name not in self.players:
+            return None
+        
+        target_role = self.players[target_name].initial_role
+        self.players[player_name].doppelganger_role = target_role
+        # Doppelganger's current role becomes the copied role
+        self.players[player_name].current_role = target_role
+        
+        return target_role
+    
+    def action_videc_view_player(self, target_name: str) -> Optional[str]:
+        """Seer views another player's current role."""
+        if target_name not in self.players:
+            return None
+        return self.players[target_name].current_role
+    
+    def action_videc_view_center(self, card_indices: List[int]) -> List[str]:
+        """Seer views center cards (up to 2)."""
+        result = []
+        for idx in card_indices:
+            if 0 <= idx < len(self.center_cards):
+                result.append(self.center_cards[idx])
+        return result
+    
+    def action_tat_switch_role(self, player_name: str, target_name: str) -> Optional[str]:
+        """Robber switches roles with another player and learns their new role."""
+        if target_name not in self.players or player_name not in self.players:
+            return None
+        
+        # Swap current roles
+        player_role = self.players[player_name].current_role
+        target_role = self.players[target_name].current_role
+        
+        self.players[player_name].current_role = target_role
+        self.players[target_name].current_role = player_role
+        
+        # Return the robber's new role
+        return target_role
+    
+    def action_tezavnez_switch_cards(self, player1_name: str, player2_name: str) -> bool:
+        """Troublemaker switches cards between two other players."""
+        if player1_name not in self.players or player2_name not in self.players:
+            return False
+        
+        # Swap current roles
+        role1 = self.players[player1_name].current_role
+        role2 = self.players[player2_name].current_role
+        
+        self.players[player1_name].current_role = role2
+        self.players[player2_name].current_role = role1
+        
+        return True
+    
+    def action_pijanec_switch_with_center(self, player_name: str, center_index: int) -> bool:
+        """Drunk switches their card with a center card (doesn't see new role)."""
+        if player_name not in self.players:
+            return False
+        if center_index < 0 or center_index >= len(self.center_cards):
+            return False
+        
+        # Swap player's role with center card
+        player_role = self.players[player_name].current_role
+        center_role = self.center_cards[center_index]
+        
+        if player_role is None:
+            return False
+        
+        self.players[player_name].current_role = center_role
+        self.center_cards[center_index] = player_role
+        
+        return True
+    
+    def action_nespecznez_view_own_role(self, player_name: str) -> Optional[str]:
+        """Insomniac views their own current role (may have changed)."""
+        if player_name not in self.players:
+            return None
+        return self.players[player_name].current_role
+    
+    def submit_vote(self, player_name: str, voted_for: str) -> Tuple[bool, str]:
+        """
+        Record a player's vote.
+        Returns: (success: bool, message: str)
+        """
+        if self.game_phase != "voting_phase":
+            return False, "Not in voting phase"
+        
+        if player_name not in self.players:
+            return False, "Player not found"
+        
+        if voted_for not in self.players:
+            return False, "Voted player not found"
+        
+        self.votes[player_name] = voted_for
+        return True, "Vote recorded"
+    
+    def all_votes_submitted(self) -> bool:
+        """Check if all players have submitted their votes."""
+        return len(self.votes) == len(self.players)
+    
+    def get_votes(self) -> Dict[str, str]:
+        """Get all votes."""
+        return self.votes.copy()
+    
+    def end_game(self) -> Dict:
+        """End the game and return all role information."""
+        self.game_phase = "ended"
+        
+        result = {
+            "players": {},
+            "center_cards": self.center_cards.copy(),
+            "initial_center_cards": self.initial_center_cards.copy()
+        }
+        
+        for name, player in self.players.items():
+            result["players"][name] = {
+                "initial_role": player.initial_role,
+                "current_role": player.current_role
+            }
+        
+        return result
     
     def to_dict(self, include_roles: bool = False) -> Dict:
         """Convert game state to dictionary."""
